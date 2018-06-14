@@ -5,10 +5,11 @@ date: "June 14, 2018"
 output:
   html_document:
     toc: true
-    toc_depth: 4
-    toc_float: true
-    collapsed: true
-    number_sections: true
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    number_sections: false
     theme: cosmo
     code_folding: hide
     df_print: paged
@@ -22,7 +23,7 @@ margin-top: 40px;
 }
 </style>
 
-# Generative Model
+# Generative model
 If we want to simulate $m$ correlated genes, it is sufficient to draw an $m$-vector sample $\boldsymbol{x}$ from an $m$-variate Gaussian distribution
 
 $$\boldsymbol{x}\sim N(\boldsymbol{\mu}, \boldsymbol{\Sigma}) $$
@@ -33,7 +34,7 @@ In practice, these draws are computed by starting with a random $m$-vector from 
 $$\boldsymbol{x}_0 \sim N(\boldsymbol 0, \boldsymbol I) $$
  and transforming the results by using the [Cholesky decomposition](https://en.wikipedia.org/wiki/Cholesky_decomposition) to introduce the desired covariance. This works as follows.
  
-## Cholesky Decomposition
+## Cholesky decomposition
 
 The Cholesky decomposition takes a Hermitian $(\boldsymbol \Sigma = \boldsymbol \Sigma^{\dagger})$ positive definite (eigenvalues $\lambda \gt 0$) matrix into the product of a lower triangular matrix $\boldsymbol S$ and its conjugate transpose $\boldsymbol S^{\dagger}$,
 
@@ -52,7 +53,7 @@ It is also possible to directly transform the zero-mean uncorrelated data $\bold
 $$ \boldsymbol x_1 = \boldsymbol S \boldsymbol x_0 + \boldsymbol \mu $$
 Here, $\boldsymbol \mu$ represents a sum of factors, such as the mean gene expression level, read coverage, etc. Next, we will show how these factors break out, and how more complex features can be modeled.
 
-## Modules and batch effects
+## Covariance structures
 
 Suppose we draw $j\in{1, ..., n}$ i.i.d. samples from the $m$-variate Gaussian distribution
 
@@ -88,17 +89,20 @@ For simplicity, we let $\sigma_i \rightarrow 1$, and let each element of the cov
 
 $$\Sigma^s_{ij}=\rho_B, \,\,\,\,\, i,j\in B $$
 
+## Mean structures 
 
-## Differential Expression
-We can now add differential expression, by encoding them in the mean expression levels $\boldsymbol \mu_M \otimes \boldsymbol \mu_T$ of genes in modules $M$, across samples in treatment groups $T$. 
+We now add corrections to the model based on mean shifts rather than covariance structure. The corrections we consider below are split into 3 kinds: 1) differential expression, 2) expression levels in modules, 3) read coverage in batches and treatment groups.
+
+### Differential expression
+We add differential expression by encoding them in the mean expression levels $\boldsymbol \mu_M \otimes \boldsymbol \mu_T$ of genes in modules $M$, across samples in treatment groups $T$. 
 
 
-## Biased Expression Levels in Modules
+### Expression levels in modules
 
 It is possible that genes in certain modules are more highly expressed than genes in other modules, regardless of any sample group. We can add that explicitly as a term $\boldsymbol \mu_M \otimes \boldsymbol 1$.
 
 
-## Biased read coverage in batches and treatments
+### Read coverage in batches and treatments
 
 It is possible that the read coverage of samples is different between treatment groups or batches -- for example, samples from sick patients or mistreated batches may have lower read coverage on average. We can explicitly include these terms, $\boldsymbol 1 \otimes \boldsymbol \mu_T +  \boldsymbol 1 \otimes \boldsymbol \mu_B$.
 
@@ -115,7 +119,7 @@ $$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S
 
 # Code
 
-## Load Libraries
+## Libraries
 
 ```{r libraries}
 require(reshape2, quietly = T)
@@ -126,7 +130,7 @@ require(pheatmap, quietly = T)
 require(RColorBrewer, quietly = T)
 ```
 
-## Generate $X_0$
+## Generate $X_0$ from a standard multivariate normal
 
 ```{r X0}
 # how many genes, samples?
@@ -152,8 +156,9 @@ scale.efron <- function(X, niter = 5){
 X0 <- scale.efron(X0, niter = 50)
 ```
 
+## Specify mean-effect structures
 
-## Set Module Genes, Batches, and Treatment Groups
+### Assign genes to modules, and samples to batches and treatment groups
 
 ```{r modulebatch}
 # ______________________________________________
@@ -181,12 +186,12 @@ groups <- list("case" = 1:round(nsamples/2),
 
 ```
 
-## Compute means from marginals (average expression level and read coverage)
+### Specify average expression level and read coverage
 
 We let the gene means $\boldsymbol \mu_g$ be distributed according to the standard normal. We let the sample means $\boldsymbol \mu_s$ also be distributed according to the standard normal. After we take the outer product, we standardize by the standard deviation of all the elements 
 
-### Question 
-*Q: should it be standardized by variance instead, since the outer product is like $\mu^2$?*.
+#### Question 
+*Q: should this be standardized by variance instead of standard deviation, since the outer product is like $\mu^2$?*.
 
 ```{r marginals}
 # add marginal mean shifts for genes and samples
@@ -198,7 +203,7 @@ rownames(z.outer) <- paste0("gene_", 1:ngenes)
 colnames(z.outer) <-  paste0("sample_", 1:nsamples)
 ```
 
-## Add the marginal means of treatment groups, batches, and modules, if any
+### Specify the means of treatment groups, batches, and modules
 
 ```{r marginalgroups}
 # initialize matrices
@@ -232,7 +237,7 @@ for(ii in 1:length(means.modules.list)){
 z.modules <- (means.modules - mean(means.modules))/sd(means.modules)
 ```
 
-## Add differential expression
+### Specify differential expression
 
 ```{r dex}
 # adjust means.modules_groups
@@ -257,7 +262,7 @@ z.modules_groups <- (means.modules_groups - mean(means.modules_groups))/sd(means
 ```
 
 
-## Visualize the mean effects
+## Visualize the mean-effects
 
 We create some annotations for a `pheatmap` figure.
 
@@ -377,7 +382,9 @@ pheatmap(A,
          main = "Expression Levels shifted by sum")
 ```
 
-## Add covariance for modules and batches
+## Specify covariance structures
+
+### Add covariance for modules and batches
 
 ```{r initialize_covariance}
 #____________________________________
@@ -427,6 +434,8 @@ rownames(Xg) <- rownames(Xs) <- rownames(Xgs) <- rownames(X0)
 colnames(Xg) <- colnames(Xs) <- colnames(Xgs) <- colnames(X0)
 ```
 
+## Visualize covariance structures
+
 Make some figures showing the correlations
 
 ```{r figures}
@@ -474,7 +483,8 @@ pheatmap(A,
          main = "Gene Correlation")
 ```
 
-## Add the mean effects to the covariance effects, using weights
+## Combine covariance and mean-effect structures
+
 
 Compute the weighted sum and make figure
 
