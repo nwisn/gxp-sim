@@ -1,0 +1,282 @@
+library(reshape2)
+require(MASS)
+library(ggplot2)
+require(ggbiplot)
+
+# how many genes, samples?
+ngenes = 20
+nsamples = 50
+
+# generate data
+set.seed(137)
+X0 <- t(mvrnorm(n = nsamples,
+                mu = rep(0, ngenes),
+                Sigma = diag(rep(1, ngenes))))
+rownames(X0) <- paste0("gene_", 1:ngenes)
+colnames(X0) <- paste0("sample_", 1:nsamples)
+
+scale.efron <- function(X, niter = 5){
+    for(i in 1:niter){
+        XT <- t(scale(X))
+        X <- t(scale(XT))
+    }
+    return(X[1:nrow(X), 1:ncol(X)])
+}
+
+X0 <- scale.efron(X0, niter = 50)
+
+
+# ______________________________________________
+# set modules, batches, etc
+
+# specify the true modules
+modules <- list("module A" = 1:round(ngenes/4),
+                "module B" = (round(ngenes/4)+1):round(2*ngenes/4),
+                "module C" = (round(2*ngenes/4)+1):round(3*ngenes/4))
+# gather the rest into an unclustered module
+module.singletons <- which(!1:ngenes %in% unlist(modules))
+if(length(module.singletons>0)) modules[["singleton"]] <- which(!1:ngenes %in% unlist(modules))
+
+# specify the sample batches
+batches <- list("batch A" = 1:round(nsamples/3),
+                "batch B" = (round(nsamples/3)+1):round(2*nsamples/3),
+                "batch C" = (round(2*nsamples/3)+1):round(3*nsamples/3))
+# gather the rest into singleton batches
+batch.singletons <- which(!1:nsamples %in% unlist(batches))
+if(length(batch.singletons)>0) batches[["singleton"]] <- which(!1:nsamples %in% unlist(batches))
+
+# specify case/control samples
+groups <- list("case" = 1:round(nsamples/2),
+               "control" = (round(nsamples/2)+1):nsamples)
+
+
+
+
+
+# add marginal mean shifts for genes and samples
+means.genes <-qnorm(seq(0.16, 0.84, length.out = ngenes), mean = 0, sd = 1) # gaussian distribution for now
+means.samples <- qnorm(seq(0.16, 0.84, length.out = nsamples), mean = 0, sd = 1) # gaussian distribution for now
+means.outerprod <- outer(means.genes, means.samples)
+z.outer <- (means.outerprod-mean(means.outerprod))/sd(unlist(means.outerprod))
+rownames(z.outer) <- paste0("gene_", 1:ngenes)
+colnames(z.outer) <-  paste0("sample_", 1:nsamples)
+
+
+# initialize matrices
+means.modules_groups <- means.modules <- means.groups <- means.batches <- matrix(0, nrow = nrow(X0), ncol = ncol(X0))
+
+# adjust group means
+means.groups.list <- list("case" = 0, "control" = -1)
+for(ii in 1:length(means.groups.list)){
+    this_group_name <- names(means.groups.list)[ii]
+    this_group <- groups[[this_group_name]]
+    means.groups[,this_group] <- means.groups[,this_group] + means.groups.list[[this_group_name]]
+}
+z.groups <- (means.groups - mean(means.groups))/sd(means.groups)
+
+# adjust batch means
+means.batches.list <- list("batch A" = 1, "batch B" = 0, "batch C" = 0)
+for(ii in 1:length(means.batches.list)){
+    this_batch_name <- names(means.batches.list)[ii]
+    this_batch <- batches[[this_batch_name]]
+    means.batches[,this_batch] <- means.batches[,this_batch] + means.batches.list[[this_batch_name]]
+}
+z.batches <- (means.batches - mean(means.batches))/sd(means.batches)
+
+# adjust module means
+means.modules.list <- list("module A" = 0, "module B" = 0, "module C" = 0, "singleton" = -1)
+for(ii in 1:length(means.modules.list)){
+    this_module_name <- names(means.modules.list)[ii]
+    this_module <- modules[[this_module_name]]
+    means.modules[this_module,] <- means.modules[this_module,] + means.modules.list[[this_module_name]]
+}
+z.modules <- (means.modules - mean(means.modules))/sd(means.modules)
+
+# adjust means.modules_groups
+means.modules_groups.list <- list(data.frame(module = "module A",
+                                             group = "case",
+                                             shift = 1),
+                                  data.frame(module = "module B",
+                                             group = "case",
+                                             shift = -1),
+                                  data.frame(module = "module C",
+                                             group = "case",
+                                             shift = 0))
+for(ii in 1:length(means.modules_groups.list)){
+    this_module_name <- means.modules_groups.list[[ii]][["module"]]
+    this_group_name <-  means.modules_groups.list[[ii]][["group"]]
+    this_shift <- means.modules_groups.list[[ii]][["shift"]]
+    this_module <- modules[[as.character(this_module_name)]]
+    this_group <- groups[[as.character(this_group_name)]]
+    means.modules_groups[this_module, this_group] <- means.modules_groups[this_module, this_group] + this_shift
+}
+z.modules_groups <- (means.modules_groups - mean(means.modules_groups))/sd(means.modules_groups)
+
+
+
+#______________________
+# Viz
+
+# gene annotations
+module.gene.df <- data.frame(module = unlist(lapply(1:length(modules),
+                                                    function(i) rep(names(modules)[i], length(modules[[i]])))),
+                             gene = as.numeric(unlist(modules)),
+                             row.names = paste0("gene_",as.numeric(unlist(modules))))
+
+
+# sample annotations
+batch.sample.df <- data.frame(batch = unlist(lapply(1:length(batches),
+                                                    function(i) rep(names(batches)[i], length(batches[[i]])))),
+                              sample = as.numeric(unlist(batches)),
+                              row.names = paste0("batch_",as.numeric(unlist(batches))))
+
+group.sample.df <- data.frame(group = unlist(lapply(1:length(groups),
+                                                    function(i) rep(names(groups)[i], length(groups[[i]])))),
+                              sample = as.numeric(unlist(groups)),
+                              row.names = paste0("group_",as.numeric(unlist(groups))))
+
+merged.sample.df.0 <- merge(batch.sample.df, group.sample.df)
+merged.sample.df <- merged.sample.df.0[order(merged.sample.df.0$sample),]
+rownames(merged.sample.df) <- colnames(z.outer)
+
+rownames(z.batches) <- rownames(z.groups) <- rownames(z.modules) <- rownames(z.modules_groups) <- rownames(z.outer)
+colnames(z.batches) <- colnames(z.groups) <- colnames(z.modules) <- colnames(z.modules_groups) <- colnames(z.outer)
+
+# visualize these blocks
+require(pheatmap)
+require(RColorBrewer)
+
+A <- z.outer
+A <- z.batches
+A <- z.groups
+A <- z.modules
+A <- z.modules_groups
+A <- z.outer + z.batches + z.groups + z.modules + z.modules_groups
+
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = F,
+         cluster_cols = F,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = module.gene.df,
+         annotation_col = merged.sample.df,
+         main = "Expression Levels")
+
+
+#____________________________________
+# covariance stuff
+
+# target covariance matrices
+Sigma.genes <- diag(rep(1,ngenes))
+Sigma.samples <- diag(rep(1,nsamples))
+
+cor.intramodules <- list("module A" = 0.5,
+                         "module B" = 0.3,
+                         "module C" = 0.1,
+                         "singletons" = 0)
+for(ii in names(cor.intramodules)){
+    this_module <- modules[[ii]]
+    rho <- cor.intramodules[[ii]]
+    edgecor <- matrix(rho, nrow = length(this_module), ncol = length(this_module)) - diag(rep(rho, length(this_module)))
+    Sigma.genes[this_module, this_module] <- Sigma.genes[this_module, this_module] + edgecor
+}
+
+cor.intrabatch <- list("batch A" = 0,
+                       "batch B" = 0,
+                       "batch C" = 0)
+for(ii in names(cor.intrabatch)){
+    this_batch <- batches[[ii]]
+    rho <- cor.intrabatch[[ii]]
+    edgecor <- matrix(rho, nrow = length(this_batch), ncol = length(this_batch)) - diag(rep(rho, length(this_batch)))
+    Sigma.samples[this_batch, this_batch] <- Sigma.samples[this_batch, this_batch] + edgecor
+}
+
+# cholesky factor
+S.genes <- chol(Sigma.genes)
+S.samples <- chol(Sigma.samples)
+
+Xg <- S.genes %*% X0
+Xs <- X0 %*% t(S.samples)
+Xgs <- S.genes %*% X0 %*% t(S.samples)
+
+
+rownames(Xg) <- rownames(Xs) <- rownames(Xgs) <- rownames(X0)
+colnames(Xg) <- colnames(Xs) <- colnames(Xgs) <- colnames(X0)
+
+A <- scale.efron(Xgs, 50)
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                   seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = T,
+         cluster_cols = T,
+         scale = "none",
+         annotation_row = module.gene.df,
+         annotation_col = merged.sample.df,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         main = "Expression Levels")
+
+A <- cor(scale.efron(Xs,50))
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = F,
+         cluster_cols = F,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = merged.sample.df,
+         annotation_col = merged.sample.df,
+         main = "Sample Correlation")
+
+A <- cor(t(scale.efron(Xg,50)))
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = F,
+         cluster_cols = F,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = module.gene.df,
+         annotation_col = module.gene.df,
+         main = "Gene Correlation")
+
+
+weight.Xgs <- 1
+weight.outer <- 0
+weight.batches <- 0
+weight.groups <- 0
+weight.modules <- 0
+weight.modules_groups <- 1
+
+Xfinal <- Xgs*weight.Xgs + z.outer*weight.outer + z.batches*weight.batches + z.groups*weight.groups + z.modules*weight.modules + z.modules_groups*weight.modules_groups
+
+A <- scale.efron(Xfinal, niter = 50)
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                   seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = T,
+         cluster_cols = T,
+         scale = "none",
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = module.gene.df,
+         annotation_col = merged.sample.df,
+         main = "Expression Levels")
+
+
+g.group <- ggbiplot(prcomp(t(scale.efron(Xfinal,50))), groups = group.sample.df$group, ellipse = T)
+g.batch <- ggbiplot(prcomp(t(scale.efron(Xfinal,50))), groups = batch.sample.df$batch, ellipse = T)
+
+
