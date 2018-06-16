@@ -1,5 +1,6 @@
 ---
-title: "Simulation of Batched, Modular, Differentially Expressed Gene Microarrays using a Standard Multivariate Normal"
+title: "Simulating gene microarrays simply:"
+subtitle: "How to create differential expression, co-expression, and batch structure from a Gaussian random number generator."
 author: "Nick Wisniewski"
 date: "June 14, 2018"
 output:
@@ -9,7 +10,7 @@ output:
     toc_float: 
       collapsed: false
       smooth_scroll: true
-    number_sections: false
+    number_sections: true
     theme: journal
     code_folding: hide
     df_print: paged
@@ -59,22 +60,27 @@ $$\boldsymbol{x}_0 \sim N(\boldsymbol 0, \boldsymbol I) $$
  
 ## Cholesky decomposition
 
-The Cholesky decomposition takes a Hermitian $(\boldsymbol \Sigma = \boldsymbol \Sigma^{\dagger})$ positive definite (eigenvalues $\lambda \gt 0$) matrix into the product of a lower triangular matrix $\boldsymbol S$ and its conjugate transpose $\boldsymbol S^{\dagger}$,
+The set of all covariance matrices $\Sigma_{m\times m}$ forms a Lie group -- an algebraic group of matrices closed under multiplication, with a smooth differential manifold structure (i.e. the matrices are points in a vector space with some smooth way to connect points). This vector space is homeomorphic to an open subset of $\mathbb{R}^d; \,\, d=\frac{1}{2}m(m+1)$, which corresponds to the number of elements in the upper or lower triangle of the matrix. 
+
+The Cholesky decomposition takes a covariance matrix into the product of a lower triangular matrix $\boldsymbol S$ and its (conjugate) transpose $\boldsymbol S^{\dagger}$,
 
 $$ \boldsymbol \Sigma = \boldsymbol S \boldsymbol S^{\dagger}$$
 
-The decomposed matrices $\boldsymbol S$ and $\boldsymbol S^{\dagger}$ are group operators that map one element to another by left multiplication
+which act like a dual vectors. The matrices $\boldsymbol S$ and $\boldsymbol S^{\dagger}$ are also group operators that transform like vectors under left multiplication
 
 $$ \boldsymbol S \boldsymbol S_0 \rightarrow \boldsymbol S_1$$
+$$ \boldsymbol S_0  \leftarrow S^{\dagger} \boldsymbol S_1  $$
 
-which leads to the following transformation rule for the covariance 
+
+The covariance matrices themselves transform as tensors
 
 $$ \boldsymbol S \boldsymbol \Sigma_0 \boldsymbol S^{\dagger} \rightarrow \boldsymbol \Sigma_1$$
 
-It is also possible to directly transform the zero-mean uncorrelated data $\boldsymbol  x_0$ into correlated data $\boldsymbol x$ with mean $\boldsymbol \mu$
+Using this operator, we can transform zero-mean uncorrelated samples $\boldsymbol  x_0$ into correlated data $\boldsymbol x$ with mean $\boldsymbol \mu$
 
-$$ \boldsymbol x_1 = \boldsymbol S \boldsymbol x_0 + \boldsymbol \mu $$
-Here, $\boldsymbol \mu$ represents a sum of factors, such as the mean gene expression level, read coverage, etc. Next, we will show how these factors break out, and how more complex features can be modeled.
+$$  \boldsymbol S \boldsymbol x_0 +\mu \rightarrow \boldsymbol x_1  $$
+
+Next, we will show how more complex features can be modeled.
 
 ## Covariance structures
 
@@ -108,7 +114,7 @@ We simulate a batch structure by specifying the covariance $\boldsymbol\Sigma_s$
 
 $$\Sigma^s_{ij}=\rho_{ij} \sigma_{i}\sigma_{j}, \,\,\,\,\, i,j\in B $$
 
-For simplicity, we let $\sigma_i \rightarrow 1$, and let each element of the covariance submatrix for a batch have the same correlation coefficient, $\rho_{ij} = \rho_B$. Thus,
+For simplicity, we let $\sigma_i \rightarrow 1$, $\sigma_j \rightarrow 1$, and let each element of the covariance submatrix for a batch have the same correlation coefficient, $\rho_{ij} = \rho_B$. Thus,
 
 $$\Sigma^s_{ij}=\rho_B, \,\,\,\,\, i,j\in B $$
 
@@ -158,7 +164,7 @@ require(pheatmap, quietly = T)
 require(RColorBrewer, quietly = T)
 ```
 
-## Generate $X_0$ from a standard multivariate normal
+## Generate from a standard normal
 
 ```{r X0}
 # how many genes, samples?
@@ -287,7 +293,7 @@ z.modules_groups <- (means.modules_groups - mean(means.modules_groups))/sd(means
 ```
 
 
-## Visualize the mean-effects
+### Visualize the mean-effects
 
 
 ```{r annotations}
@@ -457,7 +463,7 @@ rownames(Xg) <- rownames(Xs) <- rownames(Xgs) <- rownames(X0)
 colnames(Xg) <- colnames(Xs) <- colnames(Xgs) <- colnames(X0)
 ```
 
-## Visualize covariance structures
+### Visualize covariance structures
 
 
 ```{r figures}
@@ -537,7 +543,7 @@ pheatmap(A,
 
 ```
 
-## PCA Biplot
+### PCA Biplot
 
 ```{r}
 g.group <- ggbiplot(prcomp(t(scale.efron(Xfinal,50))), groups = group.sample.df$group, ellipse = T)
