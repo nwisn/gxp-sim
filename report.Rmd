@@ -22,6 +22,26 @@ margin-top: 40px;
 }
 </style>
 
+# Introduction
+We set out to simulate gene expression arrays in order to understand the effects of various biases on the results of standard methods like PCA, WGCNA, etc. For this purpose, we considered it important to have a simple and understandable generative model that has idealized statistical properties. Typical benchmarking or validation studies seek to generate "realistic" models of gene expression data, by simulating Michaelis-Mentin kinetics etc. (e.g. see the DREAM challenges). In contrast, we focus here on creating the simplest model possible that incorporates the following features:
+
+-- mean expression levels (each gene has its own expression level / variance)
+-- sample "read coverage" or similar (each sample has its own quality, or mean expression level)
+-- differential expression (mean differences between treatment groups)
+-- gene coexpression (modular structure)
+-- sample correlation (batch structure, treatment structure)
+
+We especially note that the last point about sample correlation is underappreciated in genomics. It is seldom discussed how correlations between samples necessarily induces correlations between genes, which is a particularly important detail when studying gene networks. For more details on this topic, see [Efron (2009)](https://projecteuclid.org/euclid.aoas/1254773272).
+
+Below, we design a generative model for the purpose of investigating these features on gene network inference. In the first part, we explain how to manipulate random samples from a normal distribution to exhibit all of the above features. In the second part, we implement the model in R and demonstrate how it works.
+
+
+
+
+
+
+
+
 # Generative Model
 If we want to simulate $m$ correlated genes, it is sufficient to draw an $m$-vector sample $\boldsymbol{x}$ from an $m$-variate Gaussian distribution
 
@@ -95,23 +115,23 @@ We can now add differential expression, by encoding them in the mean expression 
 
 ## Biased Expression Levels in Modules
 
-It is possible that genes in certain modules are more highly expressed than genes in other modules, regardless of any sample group. We can add that explicitly as a term $\boldsymbol \mu_M \otimes \boldsymbol 1$.
+It is possible that genes in certain modules are more highly expressed than genes in other modules, regardless of any sample group. We can add that explicitly as another term $\boldsymbol \mu'_M \otimes \boldsymbol 1$.
 
 
 ## Biased read coverage in batches and treatments
 
-It is possible that the read coverage of samples is different between treatment groups or batches -- for example, samples from sick patients or mistreated batches may have lower read coverage on average. We can explicitly include these terms, $\boldsymbol 1 \otimes \boldsymbol \mu_T +  \boldsymbol 1 \otimes \boldsymbol \mu_B$.
+It is possible that the read coverage of samples is different between treatment groups or batches -- for example, samples from sick patients or mistreated batches may have lower read coverage on average. We can explicitly include these terms, $\boldsymbol 1 \otimes \boldsymbol \mu'_T +  \boldsymbol 1 \otimes \boldsymbol \mu'_B$.
 
 ## Full model
 
 When all of the above contributions are summed, the full model looks like
 
-$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + ( \boldsymbol \mu_g \otimes \boldsymbol \mu_s ) + (\boldsymbol \mu_M \otimes \boldsymbol \mu_T) + ( \boldsymbol \mu_M \otimes \boldsymbol 1) + (\boldsymbol 1 \otimes \boldsymbol \mu_T) + (\boldsymbol 1 \otimes \boldsymbol \mu_B) $$
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + ( \boldsymbol \mu_g \otimes \boldsymbol \mu_s ) + (\boldsymbol \mu_M \otimes \boldsymbol \mu_T) + ( \boldsymbol \mu'_M \otimes \boldsymbol 1) + (\boldsymbol 1 \otimes \boldsymbol \mu'_T) + (\boldsymbol 1 \otimes \boldsymbol \mu_B) $$
 
 Finally, we standardized each contributing term into a Z-score by dividing out its standard deviation, $\mu/\sigma\rightarrow z$ , and introduced a set of weights $w_i\gt0$, so that they can be blended together more naturally,
 
 
-$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + w_{gs}( \boldsymbol z_g \otimes \boldsymbol z_s ) + w_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + w_M( \boldsymbol z_M \otimes \boldsymbol 1) + w_T(\boldsymbol 1 \otimes \boldsymbol z_T) + w_B(\boldsymbol 1 \otimes \boldsymbol z_B) $$
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + w_{gs}( \boldsymbol z_g \otimes \boldsymbol z_s ) + w_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + w_M( \boldsymbol z'_M \otimes \boldsymbol 1) + w_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + w_B(\boldsymbol 1 \otimes \boldsymbol z_B) $$
 
 # Code
 
@@ -141,7 +161,7 @@ X0 <- t(mvrnorm(n = nsamples,
 rownames(X0) <- paste0("gene_", 1:ngenes)
 colnames(X0) <- paste0("sample_", 1:nsamples)
 
-scale.efron <- function(X, niter = 5){
+scale.efron <- function(X, niter = 10){
     for(i in 1:niter){
         XT <- t(scale(X))
         X <- t(scale(XT))
