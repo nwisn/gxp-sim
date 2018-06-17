@@ -151,6 +151,36 @@ and introduced a set of weights $w_i\gt0$, so that they can be blended together 
 
 $$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + w_{gs}( \boldsymbol z_g \otimes \boldsymbol z_s ) + w_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + w_M( \boldsymbol z'_M \otimes \boldsymbol 1) + w_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + w_B(\boldsymbol 1 \otimes \boldsymbol z_B) $$
 
+which we abbreviate more generally as 
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) $$
+which takes the general form of independent contributions to the covariance and to the mean structures.
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol X_{\Sigma} +  \boldsymbol X_{\mu} $$
+
+## Singular Value Decomposition (SVD)
+
+Singular value decomposition takes the data array and decomposes it into three matrices
+
+$$\boldsymbol X_{g \otimes s}  =  \boldsymbol U_{g} \boldsymbol \Lambda_{g \otimes s} \boldsymbol V^{\dagger}_s$$
+
+
+where the left-singular vectors $\boldsymbol U_g$ are a set of orthonormal eigenvectors of the gene covariance $\boldsymbol \Sigma_g$, the right-singular vectors $\boldsymbol V_s$ are a set of orthonormal eigenvectors of the sample covariance $\boldsymbol \Sigma_s$, and $\boldsymbol \Lambda$ is the matrix of the square-roots of the non-zero eigenvalues of both covariances.
+
+Because our generative model is simply the sum of contributions to the covariance and mean structures, the eigenvalues are understood as a sum of their respective contributions
+
+$$ \boldsymbol \Lambda_{g \otimes s} = \boldsymbol \Lambda_{\Sigma} + \boldsymbol \Lambda_{\mu}  $$
+
+where,
+
+$$ \boldsymbol \Lambda_{\Sigma} = \boldsymbol U^{\dagger}_g \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} \boldsymbol V_s  $$
+
+and
+
+$$ \boldsymbol \Lambda_{\mu} = \boldsymbol U^{\dagger}_g \left( \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) \right) \boldsymbol V_s $$
+
+
+
 # Code
 
 ## Libraries

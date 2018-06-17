@@ -337,6 +337,21 @@ margin-top: 40px;
 <p><span class="math display">\[z_{ij}=\frac{\mu_{ij} - \frac{1}{nm} \sum_{ij} \mu_{ij} } {\sqrt{\sum_{ij}\frac{(\mu_{ij}-\frac{1}{nm}\sum_{ij}\mu_{ij})^2}{nm-1}}}\]</span></p>
 <p>and introduced a set of weights <span class="math inline">\(w_i\gt0\)</span>, so that they can be blended together more naturally,</p>
 <p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + w_{gs}( \boldsymbol z_g \otimes \boldsymbol z_s ) + w_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + w_M( \boldsymbol z'_M \otimes \boldsymbol 1) + w_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + w_B(\boldsymbol 1 \otimes \boldsymbol z_B) \]</span></p>
+<p>which we abbreviate more generally as</p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) \]</span> which takes the general form of independent contributions to the covariance and to the mean structures.</p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol X_{\Sigma} +  \boldsymbol X_{\mu} \]</span></p>
+</div>
+<div id="singular-value-decomposition-svd" class="section level2">
+<h2><span class="header-section-number">2.5</span> Singular Value Decomposition (SVD)</h2>
+<p>Singular value decomposition takes the data array and decomposes it into three matrices</p>
+<p><span class="math display">\[\boldsymbol X_{g \otimes s}  =  \boldsymbol U_{g} \boldsymbol \Lambda_{g \otimes s} \boldsymbol V^{\dagger}_s\]</span></p>
+<p>where the left-singular vectors <span class="math inline">\(\boldsymbol U_g\)</span> are a set of orthonormal eigenvectors of the gene covariance <span class="math inline">\(\boldsymbol \Sigma_g\)</span>, the right-singular vectors <span class="math inline">\(\boldsymbol V_s\)</span> are a set of orthonormal eigenvectors of the sample covariance <span class="math inline">\(\boldsymbol \Sigma_s\)</span>, and <span class="math inline">\(\boldsymbol \Lambda\)</span> is the matrix of the square-roots of the non-zero eigenvalues of both covariances.</p>
+<p>Because our generative model is simply the sum of contributions to the covariance and mean structures, the eigenvalues are understood as a sum of their respective contributions</p>
+<p><span class="math display">\[ \boldsymbol \Lambda_{g \otimes s} = \boldsymbol \Lambda_{\Sigma} + \boldsymbol \Lambda_{\mu}  \]</span></p>
+<p>where,</p>
+<p><span class="math display">\[ \boldsymbol \Lambda_{\Sigma} = \boldsymbol U^{\dagger}_g \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} \boldsymbol V_s  \]</span></p>
+<p>and</p>
+<p><span class="math display">\[ \boldsymbol \Lambda_{\mu} = \boldsymbol U^{\dagger}_g \left( \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) \right) \boldsymbol V_s \]</span></p>
 </div>
 </div>
 <div id="code" class="section level1">
