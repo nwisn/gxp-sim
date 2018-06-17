@@ -165,9 +165,13 @@ Singular value decomposition takes the data array and decomposes it into three m
 $$\boldsymbol X_{g \otimes s}  =  \boldsymbol U_{g} \boldsymbol \Lambda_{g \otimes s} \boldsymbol V^{\dagger}_s$$
 
 
-where the left-singular vectors $\boldsymbol U_g$ are a set of orthonormal eigenvectors of the gene covariance $\boldsymbol \Sigma_g$, the right-singular vectors $\boldsymbol V_s$ are a set of orthonormal eigenvectors of the sample covariance $\boldsymbol \Sigma_s$, and $\boldsymbol \Lambda$ is the matrix of the square-roots of the non-zero eigenvalues of both covariances.
+where the left-singular vectors $\boldsymbol U_g$ are a set of orthonormal eigenvectors of the gene covariance $\boldsymbol \Sigma_g$, the right-singular vectors $\boldsymbol V_s$ are a set of orthonormal eigenvectors of the sample covariance $\boldsymbol \Sigma_s$, and $\boldsymbol \Lambda$ is the diagonal matrix of the square-roots of the non-zero eigenvalues of both covariances, $\sqrt{\lambda_i}=\sigma_i$.
 
-Because our generative model is simply the sum of contributions to the covariance and mean structures, the eigenvalues are understood as a sum of their respective contributions
+As such, the SVD can be understood as decomposing a data matrix into a weighted sum of separable matrices,
+
+$$\boldsymbol X_{g \otimes s}  =  \sum_i^{\text{min}(m,n)} \sigma_i (\boldsymbol U_i \otimes \boldsymbol V^{\dagger}_i)$$
+
+Because our generative model is simply the sum of contributions to the covariance and mean structures, the eigenvalues are understood as a sum of their respective contributions,
 
 $$ \boldsymbol \Lambda_{g \otimes s} = \boldsymbol \Lambda_{\Sigma} + \boldsymbol \Lambda_{\mu}  $$
 
@@ -177,7 +181,8 @@ $$ \boldsymbol \Lambda_{\Sigma} = \boldsymbol U^{\dagger}_g \boldsymbol S_g \bol
 
 and
 
-$$ \boldsymbol \Lambda_{\mu} = \boldsymbol U^{\dagger}_g \left( \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) \right) \boldsymbol V_s $$
+$$ \boldsymbol \Lambda_{\mu} = \sum \boldsymbol U^{\dagger}_g \left[  w( \boldsymbol z_L \otimes \boldsymbol z_R ) \right] \boldsymbol V_s $$
+
 
 
 
