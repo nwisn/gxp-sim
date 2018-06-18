@@ -1,6 +1,6 @@
 ---
-title: "Simulating gene microarrays simply:"
-subtitle: "How to create differential expression, co-expression, and batch structure from a Gaussian random number generator."
+title: "Simulating gene microarrays simply"
+subtitle: "How to create differential expression, co-expression, and batch structure from a Gaussian random number generator"
 author: "Nick Wisniewski"
 date: "June 14, 2018"
 output:
@@ -12,7 +12,7 @@ output:
       smooth_scroll: true
     number_sections: true
     theme: journal
-    code_folding: hide
+    code_folding: show
     df_print: paged
     
 ---
@@ -158,7 +158,7 @@ which takes the general form of independent contributions to the covariance and 
 
 $$ \boldsymbol X_{g \otimes s} = \boldsymbol X_{\Sigma} +  \boldsymbol X_{\mu} $$
 
-## Singular Value Decomposition (SVD)
+## Singular Value Decomposition
 
 Singular value decomposition takes the data array and decomposes it into three matrices
 
