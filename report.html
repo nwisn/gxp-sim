@@ -258,11 +258,11 @@ margin-top: 40px;
 <h1><span class="header-section-number">1</span> Introduction</h1>
 <p>We set out to simulate gene expression arrays, in order to later investigate the effects of various biases on methods like clustering and PCA. Typical benchmarking or validation studies seek to generate “realistic” models of gene expression data, by simulating Michaelis-Mentin kinetics etc. (e.g. see the DREAM challenges). However, these simulations are much too sophisticated for our purposes, and their complexity may actually obfuscate some of the simple biases we would like to investigate. In contrast, we focused on creating a simple and understandable generative model that incorporates only the following idealized features:</p>
 <ul>
-<li>mean expression levels (each gene has its own expression level and variance, and we can control the distribution of each)</li>
-<li>sample “read coverage” or similar (each sample has its own mean expression level and variance, and we can control the distribution)</li>
-<li>differential expression (mean differences between treatment groups)</li>
-<li>gene coexpression (modular structure)</li>
-<li>sample correlation (batch structure, treatment structure)</li>
+<li><strong>Mean expression levels</strong> (each gene has its own expression level and variance, and we can control the distribution of each)</li>
+<li><strong>Sample “read coverage”</strong> or similar (each sample has its own mean expression level and variance, and we can control the distribution)</li>
+<li><strong>Differential expression</strong> (mean differences between treatment groups)</li>
+<li><strong>Gene co-expression</strong> (modular structure)</li>
+<li><strong>Sample correlation</strong> (batch structure, treatment structure)</li>
 </ul>
 <p>We especially note that the last bullet point concerning sample correlation often goes underappreciated. It is typically assumed that samples are independent. But correlation between samples reduces the effective sample size, while also inducing correlation between genes – both important details when using gene networks for statistical inference. For more details on this topic, see <a href="https://projecteuclid.org/euclid.aoas/1254773272">Efron (2009)</a>.</p>
 <p>Below, we design a generative model for the purpose of investigating these features on gene network inference. In the first part, we explain how to manipulate random samples from a normal distribution to exhibit all of the above features. In the second part, we implement the model in R and demonstrate how it works.</p>
@@ -277,31 +277,33 @@ margin-top: 40px;
 <div id="cholesky-decomposition" class="section level2">
 <h2><span class="header-section-number">2.1</span> Cholesky decomposition</h2>
 <p>The set of all covariance matrices <span class="math inline">\(\Sigma_{m\times m}\)</span> forms a Lie group – an algebraic group of matrices closed under multiplication, with a smooth differential manifold structure (i.e. the matrices are points in a vector space with some smooth way to connect points). This vector space is homeomorphic to an open subset of <span class="math inline">\(\mathbb{R}^d; \,\, d=\frac{1}{2}m(m+1)\)</span>, which corresponds to the number of elements in the upper or lower triangle of the matrix.</p>
-<p>The Cholesky decomposition takes a covariance matrix into the product of a lower triangular matrix <span class="math inline">\(\boldsymbol S\)</span> and its (conjugate) transpose <span class="math inline">\(\boldsymbol S^{\dagger}\)</span>,</p>
+<p>The Cholesky decomposition takes a covariance matrix into the product of a unique lower triangular matrix <span class="math inline">\(\boldsymbol S\)</span> and its (conjugate) transpose <span class="math inline">\(\boldsymbol S^{\dagger}\)</span>,</p>
 <p><span class="math display">\[ \boldsymbol \Sigma = \boldsymbol S \boldsymbol S^{\dagger}\]</span></p>
-<p>which act like a dual vectors. The matrices <span class="math inline">\(\boldsymbol S\)</span> and <span class="math inline">\(\boldsymbol S^{\dagger}\)</span> are also group operators that transform like vectors under left multiplication</p>
+<p>The matrices <span class="math inline">\(\boldsymbol S\)</span> and <span class="math inline">\(\boldsymbol S^{\dagger}\)</span> are also group operators, such that the composition of two operators is another operator</p>
 <p><span class="math display">\[ \boldsymbol S \boldsymbol S_0 \rightarrow \boldsymbol S_1\]</span> <span class="math display">\[ \boldsymbol S_0  \leftarrow S^{\dagger} \boldsymbol S_1  \]</span></p>
-<p>The covariance matrices themselves transform as tensors</p>
+<p>The covariance matrices, therefore, transform as tensors</p>
 <p><span class="math display">\[ \boldsymbol S \boldsymbol \Sigma_0 \boldsymbol S^{\dagger} \rightarrow \boldsymbol \Sigma_1\]</span></p>
-<p>Using this operator, we can transform zero-mean uncorrelated samples <span class="math inline">\(\boldsymbol x_0\)</span> into correlated data <span class="math inline">\(\boldsymbol x\)</span> with mean <span class="math inline">\(\boldsymbol \mu\)</span></p>
-<p><span class="math display">\[  \boldsymbol S \boldsymbol x_0 +\mu \rightarrow \boldsymbol x_1  \]</span></p>
+<p>and since <span class="math inline">\(\boldsymbol \Sigma = \boldsymbol S \boldsymbol S^{\dagger} = (\boldsymbol x- \boldsymbol \mu) (\boldsymbol x - \boldsymbol \mu)^{\dagger}\)</span>, we can transform zero-mean uncorrelated samples <span class="math inline">\(\boldsymbol x_0\)</span> into correlated data <span class="math inline">\(\boldsymbol x_1\)</span> with mean <span class="math inline">\(\boldsymbol \mu_1\)</span></p>
+<p><span class="math display">\[  \boldsymbol S \boldsymbol x_0  \rightarrow \boldsymbol x_1 - \boldsymbol \mu_1 \]</span></p>
 <p>Next, we will show how more complex features can be modeled.</p>
 </div>
 <div id="covariance-structures" class="section level2">
 <h2><span class="header-section-number">2.2</span> Covariance structures</h2>
 <p>Suppose we draw <span class="math inline">\(j\in{1, ..., n}\)</span> i.i.d. samples from the <span class="math inline">\(m\)</span>-variate Gaussian distribution</p>
-<p><span class="math display">\[\boldsymbol{x}\sim N(\boldsymbol{\mu}, \boldsymbol{\Sigma}) \]</span> in order to get a data matrix, <span class="math inline">\(\boldsymbol X= \boldsymbol x_j = x_{ij}\)</span>, where rows are genes and columns are samples. We also view this data as generated by a <em>matrix normal</em> distribution</p>
-<p><span class="math display">\[ \underset{m\times n}{\boldsymbol X_{g\otimes s}} = N_{m,n}(\underset{m}{\boldsymbol \mu_g} \otimes \underset{n}{\boldsymbol \mu_s}, \underset{m\times m}{\boldsymbol\Sigma_g} \otimes \underset{n\times n}{\boldsymbol\Sigma_s})\]</span> where we distinguish between the mean gene expression <span class="math inline">\(\boldsymbol \mu_g\)</span> and the mean sample level <span class="math inline">\(\boldsymbol \mu_s\)</span>; the sample covariance <span class="math inline">\(\boldsymbol\Sigma_s\)</span> and the gene covariance <span class="math inline">\(\boldsymbol\Sigma_g\)</span>. In our method, because our samples were i.i.d., <span class="math inline">\(\boldsymbol\Sigma_s = \boldsymbol 1\)</span>.</p>
+<p><span class="math display">\[\boldsymbol{x}\sim N(\boldsymbol{\mu}, \boldsymbol{\Sigma}) \]</span> in order to get a data matrix, <span class="math inline">\(\boldsymbol X= \boldsymbol x_j = x_{ij}\)</span>, where rows are genes and columns are samples. We can also view this data as generated by a <em>matrix normal</em> distribution</p>
+<p><span class="math display">\[ \underset{m\times n}{\boldsymbol X_{g\otimes s}} \sim N_{m,n}(\underset{m}{\boldsymbol \mu_g} \otimes \underset{n}{\boldsymbol \mu_s}, \underset{m\times m}{\boldsymbol\Sigma_g} \otimes \underset{n\times n}{\boldsymbol\Sigma_s})\]</span> where <span class="math inline">\(\otimes\)</span> denotes a tensor product, and we distinguish between the mean gene expression <span class="math inline">\(\boldsymbol \mu_g\)</span> and the mean sample level <span class="math inline">\(\boldsymbol \mu_s\)</span>; the sample covariance <span class="math inline">\(\boldsymbol\Sigma_s\)</span> and the gene covariance <span class="math inline">\(\boldsymbol\Sigma_g\)</span>. In our method, because our samples were i.i.d., <span class="math inline">\(\boldsymbol\Sigma_s = \boldsymbol 1\)</span>.</p>
+<p>The tensor product <span class="math inline">\(\otimes\)</span> is a generalization of the outer product, applying to both vectors and matrices. For two vectors <span class="math inline">\(\boldsymbol u\)</span> and <span class="math inline">\(\boldsymbol v\)</span>, the tensor product <span class="math inline">\(\boldsymbol u \otimes \boldsymbol v = \boldsymbol u \boldsymbol v^{\dagger}\)</span> produces a matrix <span class="math inline">\(\boldsymbol w\)</span> such that the coordinates satisfy <span class="math inline">\(w_{ij}=u_i v_j\)</span>. For two rank-2 matrices <span class="math inline">\(\boldsymbol u\)</span> and <span class="math inline">\(\boldsymbol v\)</span>, the tensor product produces a tensor <span class="math inline">\(\boldsymbol w\)</span> such that the coordinates satisfy <span class="math inline">\(w_{ijkl}=u_{ij} v_{kl}\)</span>, or equivalently, a matrix <span class="math inline">\(w_{st}=u_{ij} v_{kl}\)</span> where <span class="math inline">\(s=1,2,...,\text{dim}(i)\text{dim}(k)\)</span> and <span class="math inline">\(t=1,2,...,\text{dim}(j) \text{dim}(l)\)</span>. The notation is convenient because it generalizes to any combination of higher order tensors, e.g. <span class="math inline">\(\boldsymbol T= \boldsymbol u \otimes \boldsymbol v \otimes \boldsymbol w, \,\, T_{ijkl}=u_i v_j w_{kl}\)</span>.</p>
 <p>To arrive at final data, again we must start with data generated from the standard form</p>
-<p><span class="math display">\[ \underset{m\times n}{\boldsymbol X_{0}} = N_{m,n}(\underset{m}{\boldsymbol 0_g} \otimes \underset{n}{\boldsymbol 0_s}, \underset{m\times m}{\boldsymbol 1_g} \otimes \underset{n\times n}{\boldsymbol 1_s})\]</span></p>
-<p>and create the necessary covariance using the appropriate Cholesky factors, <span class="math inline">\(\boldsymbol \Sigma_g=\boldsymbol S_g \boldsymbol S_g^{\dagger}\)</span> and <span class="math inline">\(\boldsymbol \Sigma_s=\boldsymbol S_s \boldsymbol S_s^{\dagger}\)</span></p>
-<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \boldsymbol \mu_g \otimes \boldsymbol \mu_s \]</span></p>
+<p><span class="math display">\[ \underset{m\times n}{\boldsymbol X_{0}} \sim N_{m,n}(\underset{m}{\boldsymbol 0_g} \otimes \underset{n}{\boldsymbol 0_s}, \underset{m\times m}{\boldsymbol 1_g} \otimes \underset{n\times n}{\boldsymbol 1_s})\]</span></p>
+<p>and create the necessary covariance using the appropriate Cholesky factors, <span class="math inline">\(\boldsymbol \Sigma_g=\boldsymbol S_g \boldsymbol S_g^{\dagger}\)</span> and <span class="math inline">\(\boldsymbol \Sigma_s=\boldsymbol S_s \boldsymbol S_s^{\dagger}\)</span>, while also adding a translation to the desired mean <span class="math inline">\(\boldsymbol \mu_g \otimes \boldsymbol \mu_s\)</span>,</p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \boldsymbol \mu_g \otimes \boldsymbol 1 + \boldsymbol 1 \otimes \boldsymbol \mu_s \]</span></p>
 <div id="modules" class="section level3">
 <h3><span class="header-section-number">2.2.1</span> Modules</h3>
 <p>We simulate a modular structure by specifying the covariance <span class="math inline">\(\boldsymbol\Sigma_g\)</span> such that genes <span class="math inline">\(i,j\in M\)</span> in a module <span class="math inline">\(M\)</span> have high correlation,</p>
 <p><span class="math display">\[\Sigma^g_{ij}=\rho_{ij} \sigma_{i}\sigma_{j}, \,\,\,\,\, i,j\in M \]</span></p>
 <p>For simplicity, we let <span class="math inline">\(\sigma_i \rightarrow 1\)</span>, <span class="math inline">\(\sigma_j \rightarrow 1\)</span>, and let each element of the covariance submatrix for a module have the same correlation coefficient, <span class="math inline">\(\rho_{ij} = \rho_M\)</span>. Thus,</p>
 <p><span class="math display">\[\Sigma^g_{ij}=\rho_M, \,\,\,\,\, i,j\in M \]</span></p>
+<p>However, in general, we could allow each gene a separate variance.</p>
 </div>
 <div id="batches" class="section level3">
 <h3><span class="header-section-number">2.2.2</span> Batches</h3>
@@ -309,11 +311,12 @@ margin-top: 40px;
 <p><span class="math display">\[\Sigma^s_{ij}=\rho_{ij} \sigma_{i}\sigma_{j}, \,\,\,\,\, i,j\in B \]</span></p>
 <p>For simplicity, we let <span class="math inline">\(\sigma_i \rightarrow 1\)</span>, <span class="math inline">\(\sigma_j \rightarrow 1\)</span>, and let each element of the covariance submatrix for a batch have the same correlation coefficient, <span class="math inline">\(\rho_{ij} = \rho_B\)</span>. Thus,</p>
 <p><span class="math display">\[\Sigma^s_{ij}=\rho_B, \,\,\,\,\, i,j\in B \]</span></p>
+<p>However, in general, we could allow each sample a separate variance.</p>
 </div>
 </div>
 <div id="mean-structures" class="section level2">
 <h2><span class="header-section-number">2.3</span> Mean structures</h2>
-<p>We now add corrections to the model based on mean shifts rather than covariance structure. The corrections we consider below are split into 3 kinds: 1) differential expression, 2) expression levels in modules, 3) read coverage in batches and treatment groups.</p>
+<p>We now add corrections to the model based on mean shifts rather than covariance structure. In general, contributions of this type will look like <span class="math inline">\(X_{ij}=\mu_{ij}(\boldsymbol e_i \otimes \boldsymbol e_j)\)</span>, where <span class="math inline">\(\boldsymbol e_i \otimes \boldsymbol e_j\)</span> are the basis vectors of <span class="math inline">\(X_{ij}\)</span>. Our <em>matrix normal</em> model above assumes factorizability of <span class="math inline">\(X_{ij}\)</span> such that <span class="math inline">\(X_{ij}=\mu_i \mu_j (\boldsymbol e_i \otimes \boldsymbol e_j)=\boldsymbol \mu_i \otimes \boldsymbol \mu_j\)</span>. This term is structured such that we can specify individual gene and sample means, but we can consider additional components for groups of genes and samples. We now look at several additional factorizable corrections, split into 3 kinds: 1) differential expression, 2) expression levels in modules, 3) read coverage in batches and treatment groups.</p>
 <div id="differential-expression" class="section level3">
 <h3><span class="header-section-number">2.3.1</span> Differential expression</h3>
 <p>We add differential expression by encoding them in the mean expression levels <span class="math inline">\(\boldsymbol \mu_M \otimes \boldsymbol \mu_T\)</span> of genes in modules <span class="math inline">\(M\)</span>, across samples in treatment groups <span class="math inline">\(T\)</span>.</p>
@@ -330,13 +333,13 @@ margin-top: 40px;
 <div id="full-model" class="section level2">
 <h2><span class="header-section-number">2.4</span> Full model</h2>
 <p>When all of the above contributions are summed, the full model looks like</p>
-<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + ( \boldsymbol \mu_g \otimes \boldsymbol \mu_s ) + (\boldsymbol \mu_M \otimes \boldsymbol \mu_T) + ( \boldsymbol \mu'_M \otimes \boldsymbol 1) + (\boldsymbol 1 \otimes \boldsymbol \mu'_T) + (\boldsymbol 1 \otimes \boldsymbol \mu_B) \]</span></p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + (  \boldsymbol \mu_g \otimes \boldsymbol 1 + \boldsymbol 1 \otimes \boldsymbol \mu_s) + (\boldsymbol \mu_M \otimes \boldsymbol \mu_T) + ( \boldsymbol \mu'_M \otimes \boldsymbol 1) + (\boldsymbol 1 \otimes \boldsymbol \mu'_T) + (\boldsymbol 1 \otimes \boldsymbol \mu_B) \]</span></p>
 <p>Finally, we standardized each contributing term into a Z-score by centering and scaling by the standard deviation,</p>
 <p><span class="math display">\[z_{ij}=\frac{\mu_{ij} - \frac{1}{nm} \sum_{ij} \mu_{ij} } {\sqrt{\sum_{ij}\frac{(\mu_{ij}-\frac{1}{nm}\sum_{ij}\mu_{ij})^2}{nm-1}}}\]</span></p>
-<p>and introduced a set of weights <span class="math inline">\(w_i\gt0\)</span>, so that they can be blended together more naturally,</p>
-<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + w_{gs}( \boldsymbol z_g \otimes \boldsymbol z_s ) + w_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + w_M( \boldsymbol z'_M \otimes \boldsymbol 1) + w_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + w_B(\boldsymbol 1 \otimes \boldsymbol z_B) \]</span></p>
+<p>and introduced a set of weights <span class="math inline">\(\sigma_i\gt0\)</span>, so that they can be blended together more naturally,</p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sigma_{g}(  \boldsymbol z_g \otimes \boldsymbol 1) + \sigma_{s} (\boldsymbol 1 \otimes \boldsymbol z_s ) + \sigma_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + \sigma_M( \boldsymbol z'_M \otimes \boldsymbol 1) + \sigma_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + \sigma_B(\boldsymbol 1 \otimes \boldsymbol z_B) \]</span></p>
 <p>which we abbreviate more generally as</p>
-<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sum w( \boldsymbol z_L \otimes \boldsymbol z_R ) \]</span> which takes the general form of independent contributions to the covariance and to the mean structures.</p>
+<p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sum \sigma( \boldsymbol z_L \otimes \boldsymbol z_R ) \]</span> which takes the general form of independent contributions to the covariance and to the mean structures.</p>
 <p><span class="math display">\[ \boldsymbol X_{g \otimes s} = \boldsymbol X_{\Sigma} +  \boldsymbol X_{\mu} \]</span></p>
 </div>
 <div id="singular-value-decomposition" class="section level2">
@@ -351,7 +354,8 @@ margin-top: 40px;
 <p>where,</p>
 <p><span class="math display">\[ \boldsymbol \Lambda_{\Sigma} = \boldsymbol U^{\dagger}_g \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} \boldsymbol V_s  \]</span></p>
 <p>and</p>
-<p><span class="math display">\[ \boldsymbol \Lambda_{\mu} = \sum \boldsymbol U^{\dagger}_g \left[  w( \boldsymbol z_L \otimes \boldsymbol z_R ) \right] \boldsymbol V_s \]</span></p>
+<p><span class="math display">\[ \boldsymbol \Lambda_{\mu} = \sum \boldsymbol U^{\dagger}_g \left[  \sigma( \boldsymbol z_L \otimes \boldsymbol z_R ) \right] \boldsymbol V_s \]</span></p>
+<p>Thus, the variance explained (eigenvalue) by any principal component can be broken down into the sum of the contributions of each individual term included in the generative model.</p>
 </div>
 </div>
 <div id="code" class="section level1">
