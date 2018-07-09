@@ -1,6 +1,6 @@
 # gxp-sim
 
-[Vignette](https://nickwisniewski.com/gxp-sim/vignette.html
+[Vignette](https://nickwisniewski.com/gxp-sim/vignette.html)
 
 ## Simulating gene microarrays simply
 
