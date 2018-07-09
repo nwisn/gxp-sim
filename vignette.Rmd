@@ -6,13 +6,13 @@ date: "June 14, 2018"
 output:
   html_document:
     toc: true
-    toc_depth: 2
+    toc_depth: 4
     toc_float: 
       collapsed: false
       smooth_scroll: true
     number_sections: true
-    theme: journal
-    code_folding: show
+    theme: cosmo
+    code_folding: hide
     df_print: paged
     
 ---
@@ -204,12 +204,12 @@ ncores <- detectCores() - 1
 # inputs
 ngenes = 20 # number of genes 
 nsamples = 20 # number of samples
-cor.gene <- 0.7 # correlation between genes in a module
-cor.sample <- 0.0 # correlation between samples in a batch
+cor.gene <- 0.5 # correlation between genes in a module
+cor.sample <- 0.5 # correlation between samples in a batch
 background.genecor <- 0 # background gene correlations
 background.samplecor <- 0 # background sample correlations
-efron.iter = 10 # number of iterations for double standardization
-nsim <- 500 # number of simulations
+efron.iter = 100 # number of iterations for double standardization
+nsim <- 100 # number of simulations
 ```
 
 
@@ -394,7 +394,7 @@ pheatmap(B,
 
 ## Make figures
 
-```{r}
+```{r, message = F}
 require(ggbiplot, quietly = T)
 require(ggsci, quietly = T)
 require(mclust, quietly = T)
