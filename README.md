@@ -1,37 +1,18 @@
-## Welcome to GitHub Pages
+# gxp-sim
 
-You can use the [editor on GitHub](https://github.com/nwisn/gxp-sim/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+[Vignette](https://nickwisniewski.com/gxp-sim/vignette.html
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+## Simulating gene microarrays simply
 
-### Markdown
+We set out to simulate gene expression arrays, in order to later investigate the effects of various biases on methods like clustering and PCA. Typical benchmarking or validation studies seek to generate “realistic” models of gene expression data, by simulating Michaelis-Mentin kinetics etc. (e.g. see the DREAM challenges). However, these simulations are much too sophisticated for our purposes, and their complexity may actually obfuscate some of the simple biases we would like to investigate. In contrast, we focused on creating a simple and understandable generative model that incorporates only the following idealized features:
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+* Mean expression levels (each gene has its own expression level and variance, and we can control the distribution of each)
+* Sample “read coverage” or similar (each sample has its own mean expression level and variance, and we can control the distribution)
 
-```markdown
-Syntax highlighted code block
+* Differential expression (mean differences between treatment groups)
+* Gene co-expression (modular structure)
+* Sample correlation (batch structure, treatment structure)
 
-# Header 1
-## Header 2
-### Header 3
+We especially note that the last bullet point concerning sample correlation often goes underappreciated. It is typically assumed that samples are independent. But correlation between samples reduces the effective sample size, while also inducing correlation between genes – both important details when using gene networks for statistical inference. For more details on this topic, see Efron (2009).
 
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/nwisn/gxp-sim/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+In this study, we designed a generative model for the purpose of investigating these features on gene network inference. 
