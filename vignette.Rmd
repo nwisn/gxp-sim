@@ -1,0 +1,557 @@
+---
+title: "Simulating gene microarrays simply"
+subtitle: "How to create differential expression, co-expression, and batch structure from a Gaussian random number generator"
+author: "Nick Wisniewski"
+date: "June 14, 2018"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    number_sections: true
+    theme: journal
+    code_folding: show
+    df_print: paged
+    
+---
+
+<style>
+#nav_logo {
+width: 100%;
+margin-top: 40px;
+}
+</style>
+
+
+# Introduction
+We set out to simulate gene expression arrays, in order to later investigate the effects of various biases on methods like clustering and PCA. Typical benchmarking or validation studies seek to generate "realistic" models of gene expression data, by simulating Michaelis-Mentin kinetics etc. (e.g. see the DREAM challenges). However, these simulations are much too sophisticated for our purposes, and their complexity may actually obfuscate some of the simple biases we would like to investigate. In contrast, we focused on creating a simple and understandable generative model that incorporates only the following idealized features:
+
+- **Mean expression levels** (each gene has its own expression level and variance, and we can control the distribution of each)
+- **Sample "read coverage"** or similar (each sample has its own mean expression level and variance, and we can control the distribution)
+- **Differential expression** (mean differences between treatment groups)
+- **Gene co-expression** (modular structure)
+- **Sample correlation** (batch structure, treatment structure)
+
+We especially note that the last bullet point concerning sample correlation often goes underappreciated. It is typically assumed that samples are independent. But correlation between samples reduces the effective sample size, while also inducing correlation between genes -- both important details when using gene networks for statistical inference. For more details on this topic, see [Efron (2009)](https://projecteuclid.org/euclid.aoas/1254773272).
+
+Below, we design a generative model for the purpose of investigating these features on gene network inference. In the first part, we explain how to manipulate random samples from a normal distribution to exhibit all of the above features. In the second part, we implement the model in R and demonstrate how it works.
+
+
+
+
+
+
+
+
+
+# Generative model
+If we want to simulate $m$ correlated genes, it is sufficient to draw an $m$-vector sample $\boldsymbol{x}$ from an $m$-variate Gaussian distribution
+
+$$\boldsymbol{x}\sim N(\boldsymbol{\mu}, \boldsymbol{\Sigma}) $$
+
+where the (true) mean expression level of each gene $i\in{1,...,m}$ is specified by $\mu_i$, and the (true) covariance between genes $i$ and $j$ is specified by $\Sigma_{ij}$. 
+
+In practice, these draws are computed by starting with a random $m$-vector from the standard (uncorrelated) $m$-variate Gaussian distribution
+
+$$\boldsymbol{x}_0 \sim N(\boldsymbol 0, \boldsymbol I) $$
+ and transforming the results by using the [Cholesky decomposition](https://en.wikipedia.org/wiki/Cholesky_decomposition) to introduce the desired covariance. This works as follows.
+ 
+## Cholesky decomposition
+
+The set of all covariance matrices $\Sigma_{m\times m}$ forms a Lie group -- an algebraic group of matrices closed under multiplication, with a smooth differential manifold structure (i.e. the matrices are points in a vector space with some smooth way to connect points). This vector space is homeomorphic to an open subset of $\mathbb{R}^d; \,\, d=\frac{1}{2}m(m+1)$, which corresponds to the number of elements in the upper or lower triangle of the matrix. 
+
+The Cholesky decomposition takes a covariance matrix into the product of a unique lower triangular matrix $\boldsymbol S$ and its (conjugate) transpose $\boldsymbol S^{\dagger}$,
+
+$$ \boldsymbol \Sigma = \boldsymbol S \boldsymbol S^{\dagger}$$
+
+The matrices $\boldsymbol S$ and $\boldsymbol S^{\dagger}$ are also group operators, such that the composition of two operators is another operator
+
+$$ \boldsymbol S \boldsymbol S_0 \rightarrow \boldsymbol S_1$$
+$$ \boldsymbol S_0  \leftarrow S^{\dagger} \boldsymbol S_1  $$
+
+
+The covariance matrices, therefore, transform as tensors
+
+$$ \boldsymbol S \boldsymbol \Sigma_0 \boldsymbol S^{\dagger} \rightarrow \boldsymbol \Sigma_1$$
+
+
+and since $\boldsymbol \Sigma = \boldsymbol S \boldsymbol S^{\dagger} = (\boldsymbol x- \boldsymbol \mu) (\boldsymbol x - \boldsymbol \mu)^{\dagger}$, we can transform zero-mean uncorrelated samples $\boldsymbol  x_0$ into correlated data $\boldsymbol x_1$ with mean $\boldsymbol \mu_1$
+
+$$  \boldsymbol S \boldsymbol x_0  \rightarrow \boldsymbol x_1 - \boldsymbol \mu_1 $$
+
+Next, we will show how more complex features can be modeled.
+
+## Covariance structures
+
+Suppose we draw $j\in{1, ..., n}$ i.i.d. samples from the $m$-variate Gaussian distribution
+
+$$\boldsymbol{x}\sim N(\boldsymbol{\mu}, \boldsymbol{\Sigma}) $$
+in order to get a data matrix, $\boldsymbol X= \boldsymbol x_j = x_{ij}$, where rows are genes and columns are samples. We can also view this data as generated by a *matrix normal* distribution
+
+$$ \underset{m\times n}{\boldsymbol X_{g\otimes s}} \sim N_{m,n}(\underset{m}{\boldsymbol \mu_g} \otimes \underset{n}{\boldsymbol \mu_s}, \underset{m\times m}{\boldsymbol\Sigma_g} \otimes \underset{n\times n}{\boldsymbol\Sigma_s})$$
+where $\otimes$ denotes a tensor product, and we distinguish between the mean gene expression $\boldsymbol \mu_g$ and the mean sample level $\boldsymbol \mu_s$; the sample covariance $\boldsymbol\Sigma_s$ and the gene covariance $\boldsymbol\Sigma_g$. In our method, because our samples were i.i.d., $\boldsymbol\Sigma_s = \boldsymbol 1$. 
+
+The tensor product $\otimes$ is a generalization of the outer product, applying to both vectors and matrices. For two vectors $\boldsymbol u$ and $\boldsymbol v$, the tensor product $\boldsymbol u \otimes \boldsymbol v = \boldsymbol u \boldsymbol v^{\dagger}$ produces a matrix $\boldsymbol w$ such that the coordinates satisfy $w_{ij}=u_i v_j$. For two rank-2 matrices $\boldsymbol u$ and $\boldsymbol v$, the tensor product produces a tensor $\boldsymbol w$ such that the coordinates satisfy $w_{ijkl}=u_{ij} v_{kl}$, or equivalently, a matrix $w_{st}=u_{ij} v_{kl}$ where $s=1,2,...,\text{dim}(i)\text{dim}(k)$ and $t=1,2,...,\text{dim}(j) \text{dim}(l)$. The notation is convenient because it generalizes to any combination of higher order tensors, e.g. $\boldsymbol T= \boldsymbol u \otimes \boldsymbol v \otimes \boldsymbol w, \,\, T_{ijkl}=u_i v_j w_{kl}$.
+
+To arrive at final data, again we must start with data generated from the standard form 
+
+$$ \underset{m\times n}{\boldsymbol X_{0}} \sim N_{m,n}(\underset{m}{\boldsymbol 0_g} \otimes \underset{n}{\boldsymbol 0_s}, \underset{m\times m}{\boldsymbol 1_g} \otimes \underset{n\times n}{\boldsymbol 1_s})$$
+
+and create the necessary covariance using the appropriate Cholesky factors,  $\boldsymbol \Sigma_g=\boldsymbol S_g \boldsymbol S_g^{\dagger}$ and $\boldsymbol \Sigma_s=\boldsymbol S_s \boldsymbol S_s^{\dagger}$, while also adding a translation to the desired mean $\boldsymbol \mu_g \otimes \boldsymbol \mu_s$,
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \boldsymbol \mu_g \otimes \boldsymbol 1 + \boldsymbol 1 \otimes \boldsymbol \mu_s $$
+
+### Modules
+We simulate a modular structure by specifying the covariance $\boldsymbol\Sigma_g$ such that genes $i,j\in M$ in a module $M$ have high correlation, 
+
+$$\Sigma^g_{ij}=\rho_{ij} \sigma_{i}\sigma_{j}, \,\,\,\,\, i,j\in M $$
+
+For simplicity, we let $\sigma_i \rightarrow 1$, $\sigma_j \rightarrow 1$, and let each element of the covariance submatrix for a module have the same correlation coefficient, $\rho_{ij} = \rho_M$. Thus,
+
+$$\Sigma^g_{ij}=\rho_M, \,\,\,\,\, i,j\in M $$
+
+However, in general, we could allow each gene a separate variance.
+
+### Batches
+We simulate a batch structure by specifying the covariance $\boldsymbol\Sigma_s$ such that samples $i,j\in B$ in a batch $B$ have high correlation, 
+
+$$\Sigma^s_{ij}=\rho_{ij} \sigma_{i}\sigma_{j}, \,\,\,\,\, i,j\in B $$
+
+For simplicity, we let $\sigma_i \rightarrow 1$, $\sigma_j \rightarrow 1$, and let each element of the covariance submatrix for a batch have the same correlation coefficient, $\rho_{ij} = \rho_B$. Thus,
+
+$$\Sigma^s_{ij}=\rho_B, \,\,\,\,\, i,j\in B $$
+
+However, in general, we could allow each sample a separate variance.
+
+## Mean structures 
+
+We now add corrections to the model based on mean shifts rather than covariance structure. In general, contributions of this type will look like $X_{ij}=\mu_{ij}(\boldsymbol e_i \otimes \boldsymbol e_j)$, where $\boldsymbol e_i \otimes \boldsymbol e_j$ are the basis vectors of $X_{ij}$. Our *matrix normal* model above assumes factorizability of $X_{ij}$ such that $X_{ij}=\mu_i  \mu_j (\boldsymbol e_i \otimes \boldsymbol e_j)=\boldsymbol \mu_i \otimes \boldsymbol \mu_j$. This term is structured such that we can specify individual gene and sample means, but we can consider additional components for groups of genes and samples. We now look at several additional factorizable corrections, split into 3 kinds: 1) differential expression, 2) expression levels in modules, 3) read coverage in batches and treatment groups.
+
+### Differential expression
+We add differential expression by encoding them in the mean expression levels $\boldsymbol \mu_M \otimes \boldsymbol \mu_T$ of genes in modules $M$, across samples in treatment groups $T$. 
+
+
+### Expression levels in modules
+
+It is possible that genes in certain modules are more highly expressed than genes in other modules, regardless of any sample group. We can add that explicitly as another term $\boldsymbol \mu'_M \otimes \boldsymbol 1$.
+
+
+### Read coverage in batches and treatments
+
+It is possible that the read coverage of samples is different between treatment groups or batches -- for example, samples from sick patients or mistreated batches may have lower read coverage on average. We can explicitly include these terms, $\boldsymbol 1 \otimes \boldsymbol \mu'_T +  \boldsymbol 1 \otimes \boldsymbol \mu'_B$.
+
+## Full model
+
+When all of the above contributions are summed, the full model looks like
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + (  \boldsymbol \mu_g \otimes \boldsymbol 1 + \boldsymbol 1 \otimes \boldsymbol \mu_s) + (\boldsymbol \mu_M \otimes \boldsymbol \mu_T) + ( \boldsymbol \mu'_M \otimes \boldsymbol 1) + (\boldsymbol 1 \otimes \boldsymbol \mu'_T) + (\boldsymbol 1 \otimes \boldsymbol \mu_B) $$
+
+Finally, we standardized each contributing term into a Z-score by centering and scaling by the standard deviation, 
+
+
+$$z_{ij}=\frac{\mu_{ij} - \frac{1}{nm} \sum_{ij} \mu_{ij} } {\sqrt{\sum_{ij}\frac{(\mu_{ij}-\frac{1}{nm}\sum_{ij}\mu_{ij})^2}{nm-1}}}$$
+
+and introduced a set of weights $\sigma_i\gt0$, so that they can be blended together more naturally,
+
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sigma_{g}(  \boldsymbol z_g \otimes \boldsymbol 1) + \sigma_{s} (\boldsymbol 1 \otimes \boldsymbol z_s ) + \sigma_{MT}(\boldsymbol z_M \otimes \boldsymbol z_T) + \sigma_M( \boldsymbol z'_M \otimes \boldsymbol 1) + \sigma_T(\boldsymbol 1 \otimes \boldsymbol z'_T) + \sigma_B(\boldsymbol 1 \otimes \boldsymbol z_B) $$
+
+which we abbreviate more generally as 
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} + \sum \sigma( \boldsymbol z_L \otimes \boldsymbol z_R ) $$
+which takes the general form of independent contributions to the covariance and to the mean structures.
+
+$$ \boldsymbol X_{g \otimes s} = \boldsymbol X_{\Sigma} +  \boldsymbol X_{\mu} $$
+
+## Singular Value Decomposition
+
+Singular value decomposition takes the data array and decomposes it into three matrices
+
+$$\boldsymbol X_{g \otimes s}  =  \boldsymbol U_{g} \boldsymbol \Lambda_{g \otimes s} \boldsymbol V^{\dagger}_s$$
+
+
+where the left-singular vectors $\boldsymbol U_g$ are a set of orthonormal eigenvectors of the gene covariance $\boldsymbol \Sigma_g$, the right-singular vectors $\boldsymbol V_s$ are a set of orthonormal eigenvectors of the sample covariance $\boldsymbol \Sigma_s$, and $\boldsymbol \Lambda$ is the diagonal matrix of the square-roots of the non-zero eigenvalues of both covariances, $\sqrt{\lambda_i}=\sigma_i$.
+
+As such, the SVD can be understood as decomposing a data matrix into a weighted sum of separable matrices,
+
+$$\boldsymbol X_{g \otimes s}  =  \sum_i^{\text{min}(m,n)} \sigma_i (\boldsymbol U_i \otimes \boldsymbol V^{\dagger}_i)$$
+
+Because our generative model is simply the sum of contributions to the covariance and mean structures, the eigenvalues are understood as a sum of their respective contributions,
+
+$$ \boldsymbol \Lambda_{g \otimes s} = \boldsymbol \Lambda_{\Sigma} + \boldsymbol \Lambda_{\mu}  $$
+
+where,
+
+$$ \boldsymbol \Lambda_{\Sigma} = \boldsymbol U^{\dagger}_g \boldsymbol S_g \boldsymbol X_{0} \boldsymbol S_s^{\dagger} \boldsymbol V_s  $$
+
+and
+
+$$ \boldsymbol \Lambda_{\mu} = \sum \boldsymbol U^{\dagger}_g \left[  \sigma( \boldsymbol z_L \otimes \boldsymbol z_R ) \right] \boldsymbol V_s $$
+
+Thus, the variance explained (eigenvalue) by any principal component can be broken down into the sum of the contributions of each individual term included in the generative model. 
+
+
+# Code
+
+## Initialization
+
+```{r}
+source("functions.R")
+ncores <- detectCores() - 1
+
+# inputs
+ngenes = 20 # number of genes 
+nsamples = 20 # number of samples
+cor.gene <- 0.7 # correlation between genes in a module
+cor.sample <- 0.0 # correlation between samples in a batch
+background.genecor <- 0 # background gene correlations
+background.samplecor <- 0 # background sample correlations
+efron.iter = 10 # number of iterations for double standardization
+nsim <- 500 # number of simulations
+```
+
+
+## Run simulations
+
+```{r}
+# run simulations
+sims <- mclapply(1:nsim, function(ii){
+  
+  genedraw <- sample(1:ngenes, replace = F) # randomize gene assignments
+  sampledraw <- sample(1:nsamples, replace = F) # randomize sample assignments
+  
+  # assign genes to modules
+  modules <- list("module A" = genedraw[1:round(ngenes/4)],
+                  "module B" = genedraw[(round(ngenes/4)+1):round(2*ngenes/4)],
+                  "module C" = genedraw[(round(2*ngenes/4)+1):round(3*ngenes/4)])
+  
+  # assign samples to batches
+  batches <- list("batch A" = sampledraw[1:round(nsamples/4)],
+                  "batch B" = sampledraw[(round(nsamples/4)+1):round(2*nsamples/4)],
+                  "batch C" = sampledraw[(round(2*nsamples/4)+1):round(3*nsamples/4)])
+  
+  # assign samples to treatment groups
+  treatments <- list("case" = 1:round(nsamples/2),
+                     "control" = (round(nsamples/2)+1):nsamples)
+  
+  # assign a Gaussian distributed mean value to genes and samples
+  means.genes <-rnorm(ngenes, mean = 0, sd = 1) 
+  means.samples <- rnorm(nsamples, mean = 0, sd = 1) 
+
+  
+  # assign mean shifts to different groups
+  means.treatments.list <- list("case" = 0, "control" = -1)
+  means.batches.list <- list("batch A" = 1, "batch B" = 0, "batch C" = 0, "unclustered" = 0)
+  means.modules.list <- list("module A" = 1, "module B" = 0, "module C" = 0, "unclustered" = -1)
+  
+  # assign differential expression
+  means.modules_treatments.list <- list(data.frame(module = "module A",
+                                                   treatment = "case",
+                                                   shift = 1),
+                                        data.frame(module = "module B",
+                                                   treatment = "case",
+                                                   shift = -1),
+                                        data.frame(module = "module C",
+                                                   treatment = "case",
+                                                   shift = 0))
+  
+  
+  # assign covariance for modules and batches
+  sd.genes <- rep(1, ngenes)
+  sd.samples <- rep(1, nsamples)
+  cor.intramodules <- list("module A" = cor.gene,
+                           "module B" = cor.gene,
+                           "module C" = cor.gene,
+                           "unclustered" = background.genecor)
+  
+  cor.intrabatch <- list("batch A" = cor.sample,
+                         "batch B" = cor.sample,
+                         "batch C" = cor.sample,
+                         "unclustered" = background.samplecor)
+  
+  # assign weights for each term in the model
+  w.SX0S <- 1
+  w.g <- 1
+  w.s <- 1
+  w.batch <- 0
+  w.treatment <- 0
+  w.module <- 0
+  w.dex <- 1
+  
+  # run simulation
+  dat <- simulate_data(ngenes = ngenes,
+                       nsamples = nsamples,
+                       modules = modules,
+                       batches = batches,
+                       treatments = treatments,
+                       means.genes = means.genes,
+                       means.samples = means.samples,
+                       means.treatments.list = means.treatments.list,
+                       means.batches.list = means.batches.list,
+                       means.modules.list = means.modules.list,
+                       means.modules_treatments.list = means.modules_treatments.list,
+                       cor.intramodules = cor.intramodules,
+                       cor.intrabatch = cor.intrabatch,
+                       background.genecor = background.genecor,
+                       background.samplecor = background.samplecor,
+                       sd.genes = sd.genes,
+                       sd.samples = sd.samples,
+                       w.SX0S = w.SX0S,
+                       w.g = w.g,
+                       w.s = w.s,
+                       w.batch = w.batch,
+                       w.treatment = w.treatment,
+                       w.module = w.module,
+                       w.dex = w.dex,
+                       double_std_iter = efron.iter,
+                       random.seed = NULL)
+  dat
+}, mc.cores = ncores)
+```
+
+## Collect results
+
+```{r}
+# collect results
+sims.RAW <- lapply(sims, function(this_sim) this_sim$Xraw)
+sims.X0 <- lapply(sims, function(this_sim) this_sim$X0)
+sims.data <- lapply(sims, function(this_sim) this_sim$data)
+sims.SX0S <- lapply(sims, function(this_sim) this_sim$SX0S)
+sims.g <- lapply(sims, function(this_sim) this_sim$z.g)
+sims.s <- lapply(sims, function(this_sim) this_sim$z.s)
+sims.dex <- lapply(sims, function(this_sim) this_sim$z.dex)
+```
+
+
+## Examine correlations
+
+### Biclustering
+
+```{r}
+require(pheatmap, quietly = T)
+require(RColorBrewer, quietly = T)
+
+dat <- sims.data[[1]]
+data.standardized <- double_standardize(dat)
+A <- data.standardized
+pheatmap(A,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(A)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(A)), length.out = 50)),
+         cluster_rows = T,
+         cluster_cols = T,
+         scale = "none",
+         annotation_row = sims[[1]]$annotations.genes,
+         annotation_col = sims[[1]]$annotations.samples,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         main = "Expression Levels")
+
+```
+
+
+### Gene correlations
+
+```{r}
+C <- cor(t(A))
+pheatmap(C,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(C)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(C)), length.out = 50)),
+         cluster_rows = T,
+         cluster_cols = T,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = sims[[1]]$annotations.genes,
+         annotation_col = sims[[1]]$annotations.genes,
+         main = "Gene Correlation")
+```
+
+
+### Sample correlations
+
+```{r}
+B <- cor(A)
+pheatmap(B,
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdBu")))(100),
+         breaks = c(seq(-max(abs(B)), 0 - 0.01, length.out = 50),
+                    seq(0, max(abs(B)), length.out = 50)),
+         cluster_rows = T,
+         cluster_cols = T,
+         show_rownames = F,
+         show_colnames = F,
+         border_color = NA,
+         annotation_row = sims[[1]]$annotations.samples,
+         annotation_col = sims[[1]]$annotations.samples,
+         main = "Sample Correlation")
+```
+
+
+
+## Make figures
+
+```{r}
+require(ggbiplot, quietly = T)
+require(ggsci, quietly = T)
+require(mclust, quietly = T)
+
+w.dex <- sims[[1]]$w.dex
+gg1 <- gg2 <- list()
+
+# compare single and double standardization
+for(ds in c("none", "double")){
+  df.X0 <- do.call(rbind, mclapply(sims.X0, function(this_dat){
+    A <- double_standardize(this_dat, efron.iter, use = ds)
+    sxeg <- prcomp(t(A), center = TRUE, scale. = TRUE) # samples x eigengenes
+    gxea <- prcomp(A, center = TRUE, scale. = TRUE) # genes x eigenarrays
+    this_df <- data.frame(rho.reads.eigengene = cor(sxeg$x, colMeans(this_dat)),
+                          rho.expr.eigenarray = cor(gxea$x, rowMeans(this_dat)),
+                          rho.expr.eigengene = cor(sxeg$rotation, rowMeans(this_dat)),
+                          rho.reads.eigenarray = cor(gxea$rotation, colMeans(this_dat)))
+    this_df$PC <- substr(rownames(this_df), 3, 6)
+    this_df$layer <- "A. Random"
+    this_df
+  }, mc.cores = ncores))
+  
+  df.SX0S <- do.call(rbind, mclapply(sims.SX0S, function(this_dat){
+    A <- double_standardize(this_dat, efron.iter, use = ds)
+    sxeg <- prcomp(t(A), center = TRUE, scale. = TRUE) # samples x eigengenes
+    gxea <- prcomp(A, center = TRUE, scale. = TRUE) # genes x eigenarrays
+    this_df <- data.frame(rho.reads.eigengene = cor(sxeg$x, colMeans(this_dat)),
+                          rho.expr.eigenarray = cor(gxea$x, rowMeans(this_dat)),
+                          rho.expr.eigengene = cor(sxeg$rotation, rowMeans(this_dat)),
+                          rho.reads.eigenarray = cor(gxea$rotation, colMeans(this_dat)))
+    this_df$PC <- substr(rownames(this_df), 3, 6)
+    this_df$layer <- "B. Only gene and sample correlations"
+    this_df
+  }, mc.cores = ncores))
+  
+  
+  df.data <- do.call(rbind, mclapply(sims.data, function(this_dat){
+    A <- double_standardize(this_dat, efron.iter, use = ds)
+    sxeg <- prcomp(t(A), center = TRUE, scale. = TRUE) # samples x eigengenes
+    gxea <- prcomp(A, center = TRUE, scale. = TRUE) # genes x eigenarrays
+    this_df <- data.frame(rho.reads.eigengene = cor(sxeg$x, colMeans(this_dat)),
+                          rho.expr.eigenarray = cor(gxea$x, rowMeans(this_dat)),
+                          rho.expr.eigengene = cor(sxeg$rotation, rowMeans(this_dat)),
+                          rho.reads.eigenarray = cor(gxea$rotation, colMeans(this_dat)))
+    this_df$PC <- substr(rownames(this_df), 3, 6)
+    this_df$layer <- "C. Full Model"
+    this_df
+  }, mc.cores = ncores))
+  
+ 
+  
+  gg.df <- melt(rbind(df.X0, df.data, df.SX0S))
+  pcmax <- 10
+
+  gg1[[ds]] <- ggplot(gg.df) + aes(x = as.numeric(PC), y = value^2, color = layer) + 
+    #geom_jitter(width = 0.2, alpha = 0.1) + 
+    geom_smooth(method = "loess", span = .2) + 
+    facet_grid(~variable, 
+               labeller = as_labeller(c("rho.reads.eigengene"="read coverage ~ eigengene", 
+                                        "rho.expr.eigenarray"="avg expr ~ eigenarray",
+                                        "rho.expr.eigengene" = "avg expr ~ eigengene",
+                                        "rho.reads.eigenarray" = "read coverage ~ eigenarray"
+               ))) + 
+    scale_x_continuous(name ="Eigenvector", limits=c(1,pcmax), breaks = seq(1,pcmax,by=1), labels = seq(1,pcmax,by=1)) +
+    scale_y_continuous(name ="Variance Explained", limits=c(0,1), breaks = seq(0,1,by=.1), labels = seq(0,1,by=.1)) +
+    scale_color_d3(name = "Generative Model") + theme_bw()
+  
+  #gg1
+  
+  # ggsave(plot=gg1, filename=paste0("./figures/correlation_and_meanshift_", ngenes, "_genes_", nsamples, "_samples_", w.dex, "_wdex_", cor.gene, "_genecor_", cor.sample, "_samplecor_", background.samplecor, "_backgroundsamplecor_", ds, "_standardization.pdf"), height=3, width = 13)
+  
+  
+  
+  method = "ward.D2"
+  rands <- mclapply(sims, function(this_sim){
+    clust.gene <- hclust(as.dist(1-cor(double_standardize(t(this_sim$data), niter = 100, use = ds))/2), method = method)
+    rand.gene <- adjustedRandIndex(as.numeric(cutree(clust.gene, k=4)[this_sim$annotations.genes$gene]), as.numeric(this_sim$annotations.genes$module))
+    
+    clust.sample <- hclust(as.dist(1-cor(double_standardize(this_sim$data, niter = 100, use = ds))/2), method = method)
+    rand.sample <- adjustedRandIndex(as.numeric(cutree(clust.sample, k=4)[this_sim$annotations.samples$sample]), as.numeric(this_sim$annotations.samples$batch))
+    
+    this_df <- data.frame(module.randindex = rand.gene,
+                          batch.randindex = rand.sample)
+    this_df
+  }, mc.cores = ncores)
+  df.rand <- do.call(rbind, rands)
+  
+  rands.cor <- mclapply(sims, function(this_sim){
+    clust.gene <- hclust(as.dist(1-cor(double_standardize(t(this_sim$SX0S), niter = 100, use = ds))/2), method = method)
+    rand.gene <- adjustedRandIndex(as.numeric(cutree(clust.gene, k=4)[this_sim$annotations.genes$gene]), as.numeric(this_sim$annotations.genes$module))
+    
+    clust.sample <- hclust(as.dist(1-cor(double_standardize(this_sim$SX0S, niter = 100, use = ds))/2), method = method)
+    rand.sample <- adjustedRandIndex(as.numeric(cutree(clust.sample, k=4)[this_sim$annotations.samples$sample]), as.numeric(this_sim$annotations.samples$batch))
+    
+    this_df <- data.frame(module.randindex = rand.gene,
+                          batch.randindex = rand.sample)
+    this_df
+  }, mc.cores = ncores)
+  df.rand.cor <- do.call(rbind, rands.cor)
+  
+  rands.null <- mclapply(sims, function(this_sim){
+    clust.gene <- hclust(as.dist(1-cor(double_standardize(t(this_sim$X0), niter = 100, use = ds))/2), method = method)
+    rand.gene <- adjustedRandIndex(as.numeric(cutree(clust.gene, k=4)[this_sim$annotations.genes$gene]), as.numeric(this_sim$annotations.genes$module))
+    
+    clust.sample <- hclust(as.dist(1-cor(double_standardize(this_sim$X0, niter = 100, use = ds))/2), method = method)
+    rand.sample <- adjustedRandIndex(as.numeric(cutree(clust.sample, k=4)[this_sim$annotations.samples$sample]), as.numeric(this_sim$annotations.samples$batch))
+    
+    this_df <- data.frame(module.randindex = rand.gene,
+                          batch.randindex = rand.sample)
+    this_df
+  }, mc.cores = ncores)
+  df.rand.null <- do.call(rbind, rands.null)
+  
+  
+  df.rand.null$model <- "A. Null"
+  df.rand.cor$model <- "B. Only gene and sample correlations"
+  df.rand$model = "C. Full model"
+  
+  
+  gg2[[ds]] <- ggplot(rbind(df.rand, df.rand.null, df.rand.cor)) + aes(x = module.randindex, y = batch.randindex, color = model) + 
+    stat_ellipse(level = 0.68) +
+    stat_ellipse(level = 0.95, linetype = 2) +
+    #stat_density_2d(aes(fill = ..level.., color = model), geom = "polygon", colour="white", alpha = .1) +
+    geom_point(alpha = 0.05) + 
+    #geom_point(x = mean(df.rand$module.randindex, trim = .1), y= mean(df.rand$batch.randindex, trim = .1), size = 5, color = "red") +
+    geom_hline(yintercept = 0, lty = 2) + 
+    geom_vline(xintercept = 0, lty = 2) + 
+    geom_abline(slope = 1, intercept = 0, lty = 2) +
+    #stat_ellipse(level = .68)  + 
+    #stat_ellipse(level = 0.95) + 
+    scale_x_continuous(name ="Gene Module Adjusted Rand Index", limits = c(-0.2,1)) +
+    scale_y_continuous(name ="Sample Batch Adjusted Rand Index", limits = c(-0.2,1)) +
+    theme_bw() + 
+    ggtitle("Adjusted Rand Index") +
+    scale_color_d3(name = "Generative Model") +
+    coord_fixed()
+  #gg2
+  
+  # ggsave(plot=gg2, filename=paste0("./figures/rand_index_", ngenes, "_genes_", nsamples, "_samples_", w.dex, "_wdex_", cor.gene, "_genecor_", cor.sample, "_samplecor_", background.samplecor, "_backgroundsamplecor_", ds, "_standardization.pdf"), height=3.5, width = 6)
+}
+
+```
+
+### Effect of terms on correlations to PCs 
+
+```{r, message = F, warning = F, out.width="100%"}
+require(gridExtra)
+grid.arrange(gg1$none + theme(text = element_text(size = 6)), 
+             gg1$double + theme(text = element_text(size = 6)), 
+             nrow = 2) 
+```
+
+### Effect of terms on clustering
+
+```{r, message = F, warning = F, out.width="100%"}
+grid.arrange(gg2$none + theme(text = element_text(size = 6)), 
+             gg2$double + theme(text = element_text(size = 6)), 
+             nrow = 2)
+```
+
